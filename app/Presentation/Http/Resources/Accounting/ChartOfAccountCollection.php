@@ -7,9 +7,14 @@ namespace App\Presentation\Http\Resources\Accounting;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\ResourceCollection;
 
+/**
+ * Membungkus hasil paginate dari GetChartOfAccountListHandler, yang berisi baris
+ * Eloquent (read-model) — karena itu $collects menunjuk ke
+ * ChartOfAccountListItemResource, BUKAN ChartOfAccountResource.
+ */
 class ChartOfAccountCollection extends ResourceCollection
 {
-    public $collects = ChartOfAccountResource::class;
+    public $collects = ChartOfAccountListItemResource::class;
 
     public function toArray(Request $request): array
     {

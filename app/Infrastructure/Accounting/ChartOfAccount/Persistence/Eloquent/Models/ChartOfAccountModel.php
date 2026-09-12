@@ -1,0 +1,45 @@
+<?php
+
+declare(strict_types=1);
+
+namespace App\Infrastructure\Accounting\ChartOfAccount\Persistence\Eloquent\Models;
+
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Casts\Attribute;
+use Illuminate\Database\Eloquent\SoftDeletes;
+
+/**
+ * Ini adalah persistence model, BUKAN domain entity. Diberi nama
+ * ChartOfAccountModel (bukan ChartOfAccount) supaya tidak ambigu dengan
+ * App\Domain\Accounting\ChartOfAccount\Entities\ChartOfAccount. Tidak ada business behavior
+ * di sini — murni representasi tabel.
+ */
+class ChartOfAccountModel extends Model
+{
+    use HasFactory, SoftDeletes;
+
+    protected $table = 'chart_of_accounts';
+
+    protected $fillable = ['name'];
+
+    protected $casts = [
+        'created_at' => 'datetime',
+        'updated_at' => 'datetime',
+        'deleted_at' => 'datetime',
+    ];
+
+    protected function createdAtFormatted(): Attribute
+    {
+        return Attribute::make(
+            get: fn () => $this->created_at?->translatedFormat('l, d F Y H:i')
+        );
+    }
+
+    protected function updatedAtFormatted(): Attribute
+    {
+        return Attribute::make(
+            get: fn () => $this->updated_at?->translatedFormat('l, d F Y H:i')
+        );
+    }
+}

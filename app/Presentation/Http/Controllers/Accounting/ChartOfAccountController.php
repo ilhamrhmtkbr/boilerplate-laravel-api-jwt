@@ -4,14 +4,15 @@ declare(strict_types=1);
 
 namespace App\Presentation\Http\Controllers\Accounting;
 
-use App\Application\Accounting\ChartOfAccount\Actions\GetChartOfAccountListAction;
-use App\Application\Accounting\ChartOfAccount\Actions\GetChartOfAccountByIdAction;
-use App\Application\Accounting\ChartOfAccount\Actions\CreateChartOfAccountAction;
-use App\Application\Accounting\ChartOfAccount\Actions\UpdateChartOfAccountAction;
-use App\Application\Accounting\ChartOfAccount\Actions\DeleteChartOfAccountAction;
+use App\Application\Accounting\ChartOfAccount\Commands\CreateChartOfAccount\CreateChartOfAccountAction;
+use App\Application\Accounting\ChartOfAccount\Commands\DeleteChartOfAccount\DeleteChartOfAccountAction;
+use App\Application\Accounting\ChartOfAccount\Commands\UpdateChartOfAccount\UpdateChartOfAccountAction;
 use App\Application\Accounting\ChartOfAccount\DTOs\ChartOfAccountDTO;
+use App\Application\Accounting\ChartOfAccount\Queries\GetChartOfAccountDetail\GetChartOfAccountDetailAction;
+use App\Application\Accounting\ChartOfAccount\Queries\GetChartOfAccountList\GetChartOfAccountListHandler;
+use App\Application\Accounting\ChartOfAccount\Queries\GetChartOfAccountList\GetChartOfAccountListQuery;
 use App\Helpers\ResponseApiHelper;
-use App\Infrastructure\Accounting\Exports\ChartOfAccountExport;
+use App\Infrastructure\Accounting\ChartOfAccount\Exports\ChartOfAccountExport;
 use App\Presentation\Http\Requests\Accounting\StoreChartOfAccountRequest;
 use App\Presentation\Http\Requests\Accounting\UpdateChartOfAccountRequest;
 use App\Presentation\Http\Resources\Accounting\ChartOfAccountResource;
@@ -23,24 +24,35 @@ use Illuminate\Http\Response;
 use Maatwebsite\Excel\Facades\Excel;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
+/**
+ * Controller ini murni Presentation: terima HTTP, panggil Application
+ * layer (Action/Query), ubah hasil jadi response. Tidak ada satu pun
+ * business rule di sini.
+ */
 class ChartOfAccountController
 {
     public function __construct(
-        private readonly GetChartOfAccountListAction  $getListAction,
-        private readonly GetChartOfAccountByIdAction  $getByIdAction,
-        private readonly CreateChartOfAccountAction   $createAction,
-        private readonly UpdateChartOfAccountAction   $updateAction,
-        private readonly DeleteChartOfAccountAction   $deleteAction,
+        private readonly GetChartOfAccountListHandler   $getListHandler,
+        private readonly GetChartOfAccountDetailAction  $getDetailAction,
+        private readonly CreateChartOfAccountAction     $createAction,
+        private readonly UpdateChartOfAccountAction     $updateAction,
+        private readonly DeleteChartOfAccountAction     $deleteAction,
     ) {}
 
     public function index(Request $request): JsonResponse
     {
         try {
-            $data = ($this->getListAction)(
-                filters: $request->only(['search', 'sort', 'order', 'page']),
-                perPage: (int) $request->get('per_page', 15),
+            $query = new GetChartOfAccountListQuery(
+                search:        $request->string('search')->value() ?: null,
+                sortBy:        $request->string('sort', 'created_at')->value(),
+                sortDirection: $request->string('order', 'desc')->value(),
+                perPage:       (int) $request->integer('per_page', 15),
+                page:          $request->integer('page') ?: null,
             );
-            return ResponseApiHelper::success('Data retrieved successfully.', new ChartOfAccountCollection($data));
+
+            $paginated = ($this->getListHandler)($query);
+
+            return ResponseApiHelper::success('Data retrieved successfully.', new ChartOfAccountCollection($paginated));
         } catch (\Throwable $e) {
             return ResponseApiHelper::error($e);
         }
@@ -49,7 +61,7 @@ class ChartOfAccountController
     public function show(int $id): JsonResponse
     {
         try {
-            $entity = ($this->getByIdAction)($id);
+            $entity = ($this->getDetailAction)($id);
             return ResponseApiHelper::success('Data retrieved successfully.', new ChartOfAccountResource($entity));
         } catch (\Throwable $e) {
             return ResponseApiHelper::error($e);
@@ -89,7 +101,7 @@ class ChartOfAccountController
     public function downloadPdf(int $id): Response|JsonResponse
     {
         try {
-            $entity = ($this->getByIdAction)($id);
+            $entity = ($this->getDetailAction)($id);
             return Pdf::loadView('pdf.accounting.chart_of_accounts-detail', [
                 'entity' => $entity,
                 'title'  => 'Chart Of Accounts Report',
@@ -102,7 +114,13 @@ class ChartOfAccountController
     public function exportPdf(Request $request): Response|JsonResponse
     {
         try {
-            $data = ($this->getListAction)($request->only(['search']), 9999);
+            $query = new GetChartOfAccountListQuery(
+                search:  $request->string('search')->value() ?: null,
+                perPage: 9999,
+            );
+
+            $data = ($this->getListHandler)($query);
+
             return Pdf::loadView('pdf.accounting.chart_of_accounts-list', [
                 'items' => $data->items(),
                 'title' => 'Chart Of Accounts List',
